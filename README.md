@@ -86,3 +86,10 @@ Both ci and cd workflows were created for both frontend and backend using GitHub
 
 
 10. [RSM](https://github.com/rsms/rsm/tree/main/.logbook)
+
+
+----
+
+
+11. https://www.kharon.com/products/api
+12. https://d3js.org
