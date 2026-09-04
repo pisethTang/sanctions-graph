@@ -10,3 +10,6 @@ https://observablehq.com/
 
 
 Cytoscape: 
+
+pytest and django-pytest
+[SO](https://stackoverflow.com/questions/44558018/django-test-vs-pytest)
