@@ -24,3 +24,12 @@ sudo apt install gh
 
 
 - doing more research on existing sanctions-screening software out there.
+
+
+
+At the moment, my current idea of the project is to build a 
+```
+full-stack application for compliance officers by surfacing hidden 2nd-degree agents risks via some interactive network visualizer like NetworkX. This is so that compliance officers can audit every connection to individuals who get flagged by the system. 
+```
+
+This will likely change in the upcoming days after I do more research.
