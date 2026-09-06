@@ -44,6 +44,11 @@ def sanctioned_associate(db):
     EntityAddress.objects.create(
         entity=entity, full_text="Moscow, Russia", country_code="ru"
     )
+    EntityAddress.objects.create(
+            entity=entity, full_text="Saint Petersburg, Russia", country_code="ru"
+        )
+
+
     return entity
 
 
@@ -181,7 +186,7 @@ class TestSecondDegreeNetwork:
         agent = Agent.objects.create(
             name="Network Agent",
             nationality="ru",
-            addresses=[{"full_text": "Moscow, Russia", "country_code": "ru"}],
+            addresses=[{"full_text": "Saints Petersburg, Russia", "country_code": "ru"}],
         )
         matcher = ScreenMatcher()
         matches = matcher.screen(agent)
