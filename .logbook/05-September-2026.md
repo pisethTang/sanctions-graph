@@ -279,3 +279,20 @@ Referenced by:
     TABLE "screening_screeningcase" CONSTRAINT "screening_screeningcase_agent_id_cfb178ff_fk_screening_agent_id" FOREIGN KEY (agent_id) REFERENCES screening_agent(id) DEFERRABLE INITIALLY DEFERRED
 
 ```
+
+
+After setting up the scaffolding for the frontend and backend, I need to seed the sanction records table in postgresql. And so I had a look into the following resources
+
+1. [Opensanctions docs](https://www.opensanctions.org/docs/entities/)
+2. [Financial crimes](https://www.youtube.com/watch?v=qiSopTTmBI4&pp=ygUQZmluYW5jaWFsIGNyaW1lcw%3D%3D)
+3. [Podcast episode between neo4j and Fridrich Lindenburg](https://www.youtube.com/watch?v=T3uGVrrMeTo&t=758s&pp=ygUNb3BlbnNhY250aW9ucw%3D%3D)
+4. [Another talk between Fridrich & Jean Villedieu](https://www.youtube.com/watch?v=zuIeC72IwL0&t=309s&pp=ygUNb3BlbnNhY250aW9ucw%3D%3D)
+
+
+```bash 
+~/personal-projects/VueDjango/sanctions-graph 
+└─❯ wget -O backend/data/entities.ftm.json https://data.opensanctions.org/datasets/latest/default/entities.ftm.json
+--2026-09-05 21:46:27--  https://data.opensanctions.org/datasets/latest/default/entities.ftm.json
+```
+
+

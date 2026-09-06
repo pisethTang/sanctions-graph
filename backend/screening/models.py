@@ -80,6 +80,7 @@ class EntityIdentifier(models.Model):
         ("passport", "Passport"),
         ("tax_id", "Tax ID"),
         ("business_reg", "Business Registration"),
+        ("other", "Other"),
     ]
 
 
