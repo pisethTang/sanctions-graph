@@ -26,10 +26,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-8+6)53d@+4!yr(ui99u@5%y-3ib8uksd8d!@r@@rf%5!rv2yf+'
+# SECRET_KEY = 'django-insecure-8+6)53d@+4!yr(ui99u@5%y-3ib8uksd8d!@r@@rf%5!rv2yf+'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+
+
+
 
 ALLOWED_HOSTS = []
 
@@ -95,11 +100,16 @@ WSGI_APPLICATION = 'sanctionsgraph.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'sanctionsgraph',
-        'USER': 'sguser',
-        'PASSWORD': 'sgpass',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        # 'NAME': 'sanctionsgraph',
+        # 'USER': 'sguser',
+        # 'PASSWORD': 'sgpass',
+        # 'HOST': 'localhost',
+        # 'PORT': '5432',
+        'NAME': os.environ.get('DB_NAME', 'sanctionsgraph'),
+        'USER': os.environ.get('DB_USER', 'sguser'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'sgpass'),
+        'HOST': os.environ.get('DB_HOST', 'localhost'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
     }
 }
 
