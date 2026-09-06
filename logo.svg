@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <title>SanctionsGraph</title>
+
+  <!-- outer 2nd-degree network links -->
+  <g stroke="#94a3b8" stroke-opacity="0.35" stroke-width="2" fill="none">
+    <line x1="60" y1="20" x2="95" y2="80" />
+    <line x1="95" y1="80" x2="25" y2="80" />
+    <line x1="25" y1="80" x2="60" y2="20" />
+  </g>
+
+  <!-- primary match edges (hub-and-spoke) -->
+  <line x1="60" y1="60" x2="60" y2="20" stroke="#94a3b8" stroke-width="6" stroke-linecap="round" />
+  <line x1="60" y1="60" x2="95" y2="80" stroke="#94a3b8" stroke-width="6" stroke-linecap="round" />
+  <line x1="60" y1="60" x2="25" y2="80" stroke="#cbd5e1" stroke-width="6" stroke-linecap="round" stroke-dasharray="2 8" />
+
+  <!-- nodes -->
+  <circle cx="60" cy="20" r="13" fill="#3b82f6" />
+  <circle cx="95" cy="80" r="13" fill="#f59e0b" />
+  <circle cx="25" cy="80" r="13" fill="#64748b" />
+  <circle cx="60" cy="60" r="16" fill="#ef4444" />
+</svg>

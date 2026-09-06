@@ -1,3 +1,6 @@
+I have taken a more methodical approach to documenting my work after reading this [document](https://www.writethedocs.org/guide/writing/beginners-guide-to-docs/). 
+
+
 The more I look into this field of FinTech, the more interesting it gets. As boring as it sounds, I am sure that innovation is lurking somewhere in the corner. 
 
 Today is about:
