@@ -7,6 +7,7 @@ class Agent(models.Model):
     """An education agent being screened."""
     name = models.CharField(max_length=255, db_index=True)
     aliases = models.JSONField(default=list, blank=True)
+    addresses = models.JSONField(default=list, blank=True)
     birth_date = models.DateField(null=True, blank=True)
     nationality = models.CharField(max_length=2, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
