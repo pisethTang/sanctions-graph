@@ -1,7 +1,16 @@
-# SanctionsGraph
-A FinTech compliance intelligence tool that screens education agents and international applicants against global sanctions lists, then visualzies hidden risk connections (shared addresses, phone numbers, banking details) as an interactive graph. 
+<!-- # SanctionsGraph -->
+
+<img src="logo.svg" alt="SanctionsGraph logo" width="120" />
+
+SanctionsGraph is a FinTech compliance intelligence tool that combats against sanctions violations. 
+
+
+What it does
+----
+It screens education agents and international applicants against global sanctions lists, then visualzies hidden risk connections (shared addresses, phone numbers, banking details) as an interactive graph. 
 
 Project goals:
+----
 1. learn more about challenges and solutions in fintech/ed-tech. 
 2. have fun -- simplicity 
 3. quench my curiosity ... 
@@ -14,22 +23,25 @@ Project goals:
 ```
 
 
-# Key terminologies
+## Key terminologies
 1. PEP: 
 2. OpenSanctions Data
 
-# Work in progress, TODO: 
+## Work in progress, TODO: 
 - 
 
-# Core engineering concepts
-- Preserving traceability from the original record 
+## Core engineering concepts
+- Preserving traceability from the original record once an association is detected between an education agent and an entity from the sanction list.
 - 
 
 
-# Try it
+## Try it
+[Live](https://google.com) app.
 
 
-# Tech stacks
+
+
+## Tech stacks
 1. Frontend: Vue.js 3 (composition api) deployed on Vercel.
 2. Backend: Django (REST framework) deployed on Railway.
 3. Database: PostgreSQL,
@@ -38,7 +50,21 @@ Project goals:
 Both ci and cd workflows were created for both frontend and backend using GitHub Action.
 
 
-# Building & running 
+## Building & running 
+
+
+
+## Support
+
+
+Let us know if you have issues.
+See our mailing list at: project@google-groups.com
+
+License
+-------
+
+The project is licensed under the BSD license.
+
 
 
 # References
@@ -93,4 +119,8 @@ Both ci and cd workflows were created for both frontend and backend using GitHub
 
 11. https://www.kharon.com/products/api
 12. https://d3js.org
-12. https://www.puppygraph.com/blog/compliance-graph
+13. https://www.puppygraph.com/blog/compliance-graph
+14. [Method Draw](https://editor.method.ac/): used to hand-edit the `logo.svg` logo. 
+
+
+
