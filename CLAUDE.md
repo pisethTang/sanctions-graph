@@ -118,7 +118,8 @@ than assuming the Company shape. `target: true` means the entity itself is sanct
   no `.github/` workflows are present yet.
 
 ## Conventions
-
+- Follow TDD strictly (before we implement any feature, you need to write comprehensive test suites)
+- After you create a feature and it passes all the test suites, you can generate soem github command to add, commit (with appropriate and simple commit messages), push and using gh syntax to create pr and marge. (just give me the commands.)
 - Commit prefixes in use: `feat:` for code, `A:` for logbook/README additions.
 - Work happens on `feat/*` branches off `main`; `main` is the PR target.
 - After a substantive session, append to (or create) today's `.logbook/DD-Month-YYYY.md` entry —
