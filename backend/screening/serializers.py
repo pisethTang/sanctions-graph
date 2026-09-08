@@ -39,6 +39,7 @@ class MatchSerializer(serializers.ModelSerializer):
     entity_name = serializers.CharField(source="entity.name", read_only=True)
     entity_type = serializers.CharField(source="entity.entity_type", read_only=True)
     source_id = serializers.CharField(source="entity.source_id", read_only=True)
+    is_target = serializers.BooleanField(source="entity.is_target", read_only=True)
 
     class Meta:
         model = Match
@@ -48,6 +49,7 @@ class MatchSerializer(serializers.ModelSerializer):
             "entity_name",
             "entity_type",
             "source_id",
+            "is_target",
             "match_type",
             "confidence",
             "explanation",
@@ -56,6 +58,29 @@ class MatchSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = fields
+
+
+RESOLUTION_CHOICES = ["", "confirmed", "false_positive"]
+
+
+class MatchResolutionSerializer(serializers.ModelSerializer):
+    """Writable serializer for the review state of a match.
+
+    Only the officer-owned fields are writable; matcher-owned fields
+    (confidence, match_type, explanation) stay read-only.
+    """
+
+    class Meta:
+        model = Match
+        fields = ["id", "resolved", "resolution"]
+        read_only_fields = ["id"]
+
+    def validate_resolution(self, value):
+        if value not in RESOLUTION_CHOICES:
+            raise serializers.ValidationError(
+                f"Resolution must be one of {RESOLUTION_CHOICES}."
+            )
+        return value
 
 
 class ScreeningCaseSerializer(serializers.ModelSerializer):

@@ -9,6 +9,7 @@ the exact match it is.
 import networkx as nx
 from django.db import connection
 
+from screening.address_quality import assess_address_quality, apply_address_penalty
 from screening.models import (
     EntityAddress,
     EntityAlias,
@@ -174,16 +175,20 @@ class ScreenMatcher:
         for address in agent_addresses:
             if not address:
                 continue
+            quality = assess_address_quality(address)
             params = [address, address, self.address_threshold]
             for entity_id, score in self._query(sql, params):
+                raw_confidence = int(score * 100)
+                confidence = apply_address_penalty(raw_confidence, quality)
                 matches.append(
                     {
                         "entity_id": entity_id,
                         "match_type": "address_fuzzy",
-                        "confidence": int(score * 100),
+                        "confidence": confidence,
                         "explanation": (
                             f"Address '{address}' is a {score:.0%} trigram match "
                             f"to a sanctioned record's address"
+                            + (" (broad address, confidence reduced)" if quality.is_broad else "")
                         ),
                     }
                 )

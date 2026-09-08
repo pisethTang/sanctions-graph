@@ -182,6 +182,7 @@ class Command(BaseCommand):
             "source_id": str(source_id)[:255],
             "name": str(names[0]).strip()[:255],
             "entity_type": entity_type,
+            "is_target": bool(entity.get("target", False)),
             "aliases": aliases,
             "addresses": addresses,
             "identifiers": list(identifiers),
@@ -218,6 +219,7 @@ class Command(BaseCommand):
                     name=r["name"],
                     entity_type=r["entity_type"],
                     source_id=r["source_id"],
+                    is_target=r["is_target"],
                 )
                 for r in new_records
             ],

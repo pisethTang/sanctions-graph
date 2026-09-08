@@ -36,3 +36,17 @@ export async function getNetwork(id: number) {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
+
+export async function updateMatchResolution(
+  id: number,
+  resolved: boolean,
+  resolution: string
+) {
+  const res = await fetch(`${API_BASE}/matches/${id}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resolved, resolution }),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
