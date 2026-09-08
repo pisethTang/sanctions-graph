@@ -119,8 +119,10 @@ describe("CaseDetail", () => {
     expect(legend.text()).toContain("Organization");
     expect(legend.text()).toContain("Confirmed hit");
     expect(legend.text()).toContain("Dismissed");
-    expect(legend.text()).toContain("Direct match");
+    expect(legend.text()).toContain("Agent matches");
     expect(legend.text()).toContain("Name match");
+    expect(legend.text()).toContain("Identifier / address match");
+    expect(legend.text()).toContain("Entity links");
     expect(legend.text()).toContain("Shared address / identifier");
   });
 

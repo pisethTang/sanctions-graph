@@ -9,10 +9,21 @@ dependencies = [
     "django-cors-headers>=4.9.0",
     "djangorestframework>=3.18.0",
     "networkx>=3.6.1",
-    "pandas>=3.0.5",
     "psycopg2-binary>=2.9.12",
     "pytest>=9.1.1",
     "pytest-django>=4.14.0",
     "python-dotenv>=1.2.3",
     "requests>=2.34.2",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.1.0",
+]
+
+[tool.coverage.run]
+# Test files and migrations are scaffolding, not screening logic.
+omit = ["*/test/*", "*/migrations/*"]
+
+[tool.coverage.report]
+show_missing = true

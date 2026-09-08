@@ -30,6 +30,7 @@ const error = ref("");
 const sidebarOpen = ref(true);
 const graphError = ref("");
 const selectedEntityId = ref<number | null>(null);
+const focusedNodeIds = ref<Set<string>>(new Set());
 const actionError = ref("");
 
 // Pass the ref itself so the composables react when matches.value is assigned.
@@ -73,10 +74,11 @@ function fitGraph() {
   cy?.fit(undefined, 24);
 }
 
-// Clicking a sidebar card selects the entity's node and pans the graph to it,
-// so the list and the graph work as two views of the same selection.
+// Clicking a sidebar card focuses the entity in both the list and the graph,
+// so the two panels stay in sync.
 function focusEntity(entityId: number) {
   selectedEntityId.value = entityId;
+  focusNode(`entity-${entityId}`, false);
   if (!cy) return;
   const node = cy.getElementById(`entity-${entityId}`);
   if (node.empty()) return;
@@ -86,6 +88,31 @@ function focusEntity(entityId: number) {
     { center: { eles: node }, zoom: Math.max(cy.zoom(), 1) },
     { duration: 250 }
   );
+}
+
+// Focus mode: select one or more nodes and dim everything that is not directly
+// connected to them. This lets an officer isolate a suspicious entity's local
+// network without removing the rest of the graph.
+function focusNode(nodeId: string, additive: boolean) {
+  if (!cy) return;
+  const node = cy.getElementById(nodeId);
+  if (node.empty()) return;
+  const next = new Set(focusedNodeIds.value);
+  if (additive) {
+    if (next.has(nodeId)) next.delete(nodeId);
+    else next.add(nodeId);
+  } else {
+    next.clear();
+    next.add(nodeId);
+  }
+  focusedNodeIds.value = next;
+  updateGraphVisibility();
+}
+
+function clearFocus() {
+  focusedNodeIds.value = new Set();
+  selectedEntityId.value = null;
+  updateGraphVisibility();
 }
 
 function groupResolved(group: EntityGroup) {
@@ -132,11 +159,24 @@ function updateGraphVisibility() {
     }
   }
 
+  // When focus mode is active, the focused node(s) and their direct neighbours
+  // stay visible even if filters would normally dim them.
+  let focusVisibleIds: Set<string> | null = null;
+  if (focusedNodeIds.value.size > 0) {
+    const focused = cy!.collection();
+    for (const id of focusedNodeIds.value) {
+      focused.merge(cy!.getElementById(id));
+    }
+    focusVisibleIds = new Set(focused.closedNeighborhood().nodes().map((n) => n.id()));
+  }
+
   cy.batch(() => {
     cy!.nodes().forEach((node) => {
       const isAgent = node.data("type") === "agent";
       const review = isAgent ? undefined : reviewByEntity.get(entityPk(node.id()));
-      node.toggleClass("dimmed", !isAgent && !visibleIds.has(node.id()));
+      const filterDimmed = !isAgent && !visibleIds.has(node.id());
+      const focusDimmed = focusVisibleIds !== null && !focusVisibleIds.has(node.id());
+      node.toggleClass("dimmed", filterDimmed || focusDimmed);
       node.toggleClass("dismissed", review === "false_positive");
       node.toggleClass("confirmed", review === "confirmed");
     });
@@ -149,13 +189,26 @@ function updateGraphVisibility() {
       const touchesAgent =
         edge.source().data("type") === "agent" || edge.target().data("type") === "agent";
       const wrongType = !!matchType && touchesAgent && edge.data("label") !== matchType;
-      edge.toggleClass("dimmed", touchesHidden || wrongType);
+      const focusDimmed =
+        focusVisibleIds !== null &&
+        (!focusVisibleIds.has(edge.source().id()) || !focusVisibleIds.has(edge.target().id()));
+      edge.toggleClass("dimmed", touchesHidden || wrongType || focusDimmed);
     });
   });
 }
 
 function entityPk(nodeId: string) {
   return Number(nodeId.replace("entity-", ""));
+}
+
+// Cap node size with a log curve so highly-connected hubs don't become giant
+// blobs that swallow their neighbours. A node with 1 link stays small; a node
+// with 50 links only grows modestly, keeping the graph readable.
+function nodeSize(degree: number) {
+  const base = 22;
+  const scale = 8;
+  const max = 44;
+  return Math.min(max, base + Math.log2(Math.max(1, degree)) * scale);
 }
 
 watch(filteredMatches, updateGraphVisibility);
@@ -170,10 +223,10 @@ function renderGraph(graph: NetworkGraph) {
       layout: {
         name: "cose",
         animate: false,
-        componentSpacing: 80,
+        componentSpacing: 120,
         nodeOverlap: 20,
-        idealEdgeLength: 60,
-        nodeRepulsion: 800000,
+        idealEdgeLength: 100,
+        nodeRepulsion: 1200000,
         edgeElasticity: 100,
         nestingFactor: 5,
         gravity: 40,
@@ -186,11 +239,12 @@ function renderGraph(graph: NetworkGraph) {
         {
           selector: "node",
           style: {
-            label: "data(label)",
+            label: (ele: cytoscape.NodeSingular) =>
+              ele.degree() < 2 ? "" : ele.data("label"),
             "font-size": "10px",
             "background-color": "#607d8b",
-            width: "mapData(degree, 1, 20, 16, 48)",
-            height: "mapData(degree, 1, 20, 16, 48)",
+            width: (ele: cytoscape.NodeSingular) => nodeSize(ele.degree()),
+            height: (ele: cytoscape.NodeSingular) => nodeSize(ele.degree()),
             "text-valign": "bottom",
             "text-halign": "center",
             "text-margin-y": 4,
@@ -230,11 +284,11 @@ function renderGraph(graph: NetworkGraph) {
           },
         },
         {
-          selector: "edge[label *= 'shared']",
+          selector: "edge[category = 'shared'], edge[label *= 'shared']",
           style: { "line-color": "#f57c00", "target-arrow-color": "#f57c00" },
         },
         {
-          selector: "edge[label *= 'name']",
+          selector: "edge[category = 'name'], edge[label *= 'name']",
           style: { "line-color": "#1976d2", "target-arrow-color": "#1976d2" },
         },
         {
@@ -268,19 +322,36 @@ function renderGraph(graph: NetworkGraph) {
             "border-opacity": 1,
           },
         },
+
       ],
     });
 
-    // Hide labels on low-degree nodes until hovered to reduce clutter.
-    cy.style().selector("node[degree < 2]").style({ label: "" }).update();
+    // mapData("degree") has been replaced with function-based styles, so no
+    // degree data field is needed; labels and sizes are computed live.
 
     cy.on("mouseover", "node", (evt) => {
       evt.target.style("label", evt.target.data("label"));
     });
     cy.on("mouseout", "node", (evt) => {
-      if ((evt.target.data("degree") ?? 0) < 2) {
-        evt.target.style("label", "");
+      // Restore the function-based label (hide low-degree labels again).
+      evt.target.removeStyle("label");
+    });
+
+    // Click a node to focus it; Ctrl/Cmd+click to add/remove from the focus set.
+    // Click the canvas background to clear focus.
+    cy.on("tap", "node", (evt) => {
+      const node = evt.target;
+      const originalEvent = evt.originalEvent as MouseEvent | undefined;
+      const additive = !!(originalEvent?.ctrlKey || originalEvent?.metaKey);
+      if (!additive) cy!.elements().unselect();
+      node.select();
+      focusNode(node.id(), additive);
+      if (node.data("type") !== "agent") {
+        selectedEntityId.value = entityPk(node.id());
       }
+    });
+    cy.on("tap", (evt) => {
+      if (evt.target === cy) clearFocus();
     });
 
     cy.ready(fitGraph);
@@ -447,6 +518,14 @@ onBeforeUnmount(() => {
         <div class="graph-wrap">
           <div class="graph-toolbar">
             <button type="button" @click="fitGraph">Fit graph</button>
+            <button
+              v-if="focusedNodeIds.size > 0"
+              type="button"
+              class="clear-focus"
+              @click="clearFocus"
+            >
+              Clear focus
+            </button>
           </div>
           <div class="graph-container" ref="graphEl">
             <p v-if="graphError" class="error graph-error">
@@ -460,9 +539,10 @@ onBeforeUnmount(() => {
             <span class="legend-item"><i class="dot dot-org"></i>Organization</span>
             <span class="legend-item"><i class="dot dot-confirmed"></i>Confirmed hit</span>
             <span class="legend-item"><i class="dot dot-dismissed"></i>Dismissed</span>
-            <span class="legend-title">Edges</span>
-            <span class="legend-item"><i class="line line-direct"></i>Direct match</span>
+            <span class="legend-title">Agent matches</span>
             <span class="legend-item"><i class="line line-name"></i>Name match</span>
+            <span class="legend-item"><i class="line line-direct"></i>Identifier / address match</span>
+            <span class="legend-title">Entity links</span>
             <span class="legend-item"><i class="line line-shared"></i>Shared address / identifier</span>
           </div>
         </div>

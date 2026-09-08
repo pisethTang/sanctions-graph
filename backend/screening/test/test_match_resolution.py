@@ -114,6 +114,19 @@ class TestMatchResolutionEndpoint:
         assert matches[0].match_type == "name_fuzzy"
 
 
+class TestMatchRetrieveEndpoint:
+    """GET /api/matches/<id>/ returns the full read-only match representation."""
+
+    def test_retrieve_match(self, api_client, case_with_matches):
+        _, matches = case_with_matches
+        res = api_client.get(f"/api/matches/{matches[0].id}/")
+        assert res.status_code == 200
+        assert res.data["id"] == matches[0].id
+        assert res.data["match_type"] == "name_fuzzy"
+        assert res.data["entity_name"] == "Entity 0"
+        assert res.data["resolved"] is False
+
+
 class TestCaseStatusRollup:
     """The case status follows the review state of its matches."""
 

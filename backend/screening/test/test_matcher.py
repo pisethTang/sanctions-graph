@@ -1,3 +1,4 @@
+import networkx as nx
 import pytest
 from django.db import connection
 
@@ -246,3 +247,74 @@ class TestEdgeCases:
         matches = matcher.screen(agent)
         exact_matches = [m for m in matches if m["match_type"] == "name_exact"]
         assert len(exact_matches) == 1
+
+
+class TestBlankAndEmptyInputs:
+    """Blank names and empty addresses are skipped, never queried."""
+
+    def test_whitespace_alias_is_skipped_by_name_tiers(self, db, sanctioned_person):
+        # A whitespace-only alias is truthy, so it reaches the strip() guard in
+        # both _name_exact_matches and _name_fuzzy_matches; both must skip it.
+        agent = Agent.objects.create(
+            name="Unrelated Person",
+            aliases=[" ", "   "],
+            nationality="ru",
+        )
+        matcher = ScreenMatcher()
+        matches = matcher.screen(agent)
+        assert matches == []
+
+    def test_empty_address_string_is_skipped(self, db, sanctioned_person):
+        # _agent_addresses normally filters empty strings out, but the
+        # address tier guards against them too; exercise that guard directly.
+        matcher = ScreenMatcher()
+        assert matcher._address_fuzzy_matches([""]) == []
+
+    def test_plain_string_addresses_are_tolerated(self, db, sanctioned_person):
+        # Agent.addresses is documented as a list of dicts, but plain strings
+        # must be accepted as well.
+        agent = Agent.objects.create(
+            name="String Address Agent",
+            nationality="ru",
+            addresses=["Moscow, Russian Federation"],
+        )
+        matcher = ScreenMatcher()
+        matches = matcher.screen(agent)
+        addr_matches = [m for m in matches if m["match_type"] == "address_fuzzy"]
+        assert len(addr_matches) == 1
+        assert addr_matches[0]["entity_id"] == sanctioned_person.id
+
+
+class TestSharedAttributeEdges:
+    def test_empty_frontier_returns_no_neighbours(self, db):
+        # The network walk calls this with an empty frontier on its last pass;
+        # it must short-circuit instead of querying with an empty IN list.
+        matcher = ScreenMatcher()
+        graph = nx.Graph()
+        assert matcher._shared_attribute_edges(set(), graph) == set()
+        assert graph.number_of_edges() == 0
+
+
+class TestCollect:
+    """_collect keeps the strongest tier per entity, then highest confidence."""
+
+    def test_higher_confidence_same_tier_replaces_weaker_match(self):
+        # Within one tier an entity can be hit twice with different trigram
+        # scores; the higher score must win.
+        found = {}
+        weaker = {
+            "entity_id": 1,
+            "match_type": "name_fuzzy",
+            "confidence": 70,
+            "explanation": "weaker",
+        }
+        stronger = {
+            "entity_id": 1,
+            "match_type": "name_fuzzy",
+            "confidence": 85,
+            "explanation": "stronger",
+        }
+        ScreenMatcher._collect(found, [weaker])
+        ScreenMatcher._collect(found, [stronger])
+        assert found[1]["confidence"] == 85
+        assert found[1]["explanation"] == "stronger"
