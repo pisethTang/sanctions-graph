@@ -6,8 +6,10 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "django>=6.1.1",
+    "django-cors-headers>=4.9.0",
     "djangorestframework>=3.18.0",
     "networkx>=3.6.1",
+    "pandas>=3.0.5",
     "psycopg2-binary>=2.9.12",
     "pytest>=9.1.1",
     "pytest-django>=4.14.0",

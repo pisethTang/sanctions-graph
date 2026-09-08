@@ -5,6 +5,7 @@ import hashlib
 
 class Agent(models.Model):
     """An education agent being screened."""
+    id = models.BigAutoField(primary_key=True)
     name = models.CharField(max_length=255, db_index=True)
     aliases = models.JSONField(default=list, blank=True)
     addresses = models.JSONField(default=list, blank=True)

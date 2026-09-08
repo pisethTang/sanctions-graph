@@ -112,3 +112,61 @@ refused all over again:
 ```bash
 docker start sg-postgres
 ```
+
+
+I finally came around to creating the frontend ... which is not too difficult as the backend is substantive. 
+
+Starting off with mocking the actial `api.ts` file with `api.test.ts`. Note that for the frontend, I co-locate the logic file and its corresponding file within the same folder. This is because the frontend file structure tends to be lengthy and so it's easier to find the file and its test cases within the same folder. Also it's a convention in Vue ecosystem!
+
+Here is the output of the `api.test.ts`
+
+```bash
+~/personal-projects/VueDjango/sanctions-graph/frontend 
+└─❯ npx vitest run src/services/api.test.ts
+
+ RUN  v5.0.0 /home/sething2002/personal-projects/VueDjango/sanctions-graph/frontend
+
+ ✓ src/services/api.test.ts (4 tests) 10ms
+   ✓ API service (4)
+     ✓ createAgent POSTs JSON and returns parsed response 4ms
+     ✓ screenAgent sends identifiers and returns case 1ms
+     ✓ getCases returns list 1ms
+     ✓ throws on HTTP error 2ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  22:45:25
+   Duration  273ms (transform 65%, import 19%, tests 10%, worker 6%)
+
+                                                                                                                                                                               
+~/personal-projects/VueDjango/sanctions-graph/frontend 
+└─❯ npx vitest run src/views/AgentForm.test.ts
+
+
+ RUN  v5.0.0 /home/sething2002/personal-projects/VueDjango/sanctions-graph/frontend
+
+ ❯ src/views/AgentForm.test.ts (0 test)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/views/AgentForm.test.ts [ src/views/AgentForm.test.ts ]
+Error: Cannot find module './AgentForm.vue' imported from /home/sething2002/personal-projects/VueDjango/sanctions-graph/frontend/src/views/AgentForm.test.ts
+ ❯ src/views/AgentForm.test.ts:3:1
+      1| import { describe, it, expect } from "vitest";
+      2| import { mount } from "@vue/test-utils";
+      3| import AgentForm from "./AgentForm.vue";
+       | ^
+      4|
+      5| describe("AgentForm", () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  23:04:04
+   Duration  287ms (worker 96%, environment 4%)
+```
+
+
+
