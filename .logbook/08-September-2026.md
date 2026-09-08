@@ -347,6 +347,35 @@ The two compliance-officer features proposed earlier, built TDD-style.
 
 
 
+---
+
+## Follow-up: review decisions now show on graph nodes
+
+The user dismissed NAYARA ENERGY as a false positive and noticed two things: the card only dimmed slightly, and the graph node stayed bright green — the graph didn't reflect the review decision at all.
+
+### Changes (`frontend/src/views/CaseDetail.vue`)
+
+1. **`updateGraphVisibility()` now applies review state classes.** An entity counts as reviewed only when *all* its matches are resolved. The resolution then maps to a node class:
+   - `dismissed` (false positive) → node turns grey (`#9e9e9e`), label fades, and all its edges dim.
+   - `confirmed` → node gets a thick dark-green ring.
+2. **Stronger card dim.** Resolved cards went from `opacity: 0.65` to `0.5` with a grey background — the reviewed state is now obvious at a glance.
+3. **Legend extended** with "Confirmed hit" (green-ringed dot) and "Dismissed" (grey dot) so the new node states are explained.
+
+### Tests
+
+- Unit legend test updated for the two new entries.
+- The e2e dismiss test now also asserts the graph node gets the `dismissed` class (and not `confirmed`).
+
+### Verification
+
+- `npm test` → 39 passed
+- `npm run test:e2e` → 7 passed
+- `npm run build` → clean
+
+### Lesson
+
+Every state change that exists in the list must be visible in the graph. Compliance officers think in terms of decisions, not UI panels — if a decision doesn't change the picture, it doesn't feel real.
+
 #### Todo
 
 1. surface 100+ hidden 2nd-degree links via addresses and aliases 
