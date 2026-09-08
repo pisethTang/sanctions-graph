@@ -1,17 +1,26 @@
 <script setup lang="ts">
-import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, getCurrentInstance, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import cytoscape from "cytoscape";
 import type { Core } from "cytoscape";
-import { getCase, getNetwork } from "../services/api";
+import { getCase, getNetwork, updateMatchResolution } from "../services/api";
+import { useMatchFilters } from "../composables/useMatchFilters";
+import { useRiskSummary } from "../composables/useRiskSummary";
 import type { CaseDetail, Match, NetworkGraph } from "../types/api";
+
+interface Props {
+  caseId?: number | string;
+}
+
+const props = defineProps<Props>();
 
 // Read the route off the component proxy rather than useRoute(): that keeps
 // the component mountable with a plain { $route } stub and still resolves
-// through the real router in the app.
+// through the real router in the app. A prop is accepted so tests can bypass
+// the route entirely.
 const proxy = getCurrentInstance()?.proxy as
   | { $route?: { params?: Record<string, string | string[]> } }
   | undefined;
-const rawId = proxy?.$route?.params?.id;
+const rawId = props.caseId ?? proxy?.$route?.params?.id;
 const caseId = Number(Array.isArray(rawId) ? rawId[0] : rawId);
 
 const detail = ref<CaseDetail | null>(null);
@@ -19,6 +28,13 @@ const matches = ref<Match[]>([]);
 const loading = ref(false);
 const error = ref("");
 const sidebarOpen = ref(true);
+const graphError = ref("");
+const selectedEntityId = ref<number | null>(null);
+const actionError = ref("");
+
+// Pass the ref itself so the composables react when matches.value is assigned.
+const { filters, filtered: filteredMatches, resetFilters } = useMatchFilters(matches);
+const summary = useRiskSummary(matches);
 
 const graphEl = ref<HTMLElement | null>(null);
 let cy: Core | null = null;
@@ -34,7 +50,7 @@ interface EntityGroup {
 
 const groupedMatches = computed<EntityGroup[]>(() => {
   const map = new Map<number, EntityGroup>();
-  for (const match of matches.value) {
+  for (const match of filteredMatches.value) {
     const existing = map.get(match.entity_id);
     if (existing) {
       existing.matches.push(match);
@@ -53,11 +69,96 @@ const groupedMatches = computed<EntityGroup[]>(() => {
   return Array.from(map.values()).sort((a, b) => b.bestConfidence - a.bestConfidence);
 });
 
-const uniqueEntityCount = computed(() => groupedMatches.value.length);
-
 function fitGraph() {
   cy?.fit(undefined, 24);
 }
+
+// Clicking a sidebar card selects the entity's node and pans the graph to it,
+// so the list and the graph work as two views of the same selection.
+function focusEntity(entityId: number) {
+  selectedEntityId.value = entityId;
+  if (!cy) return;
+  const node = cy.getElementById(`entity-${entityId}`);
+  if (node.empty()) return;
+  cy.elements().unselect();
+  node.select();
+  cy.animate(
+    { center: { eles: node }, zoom: Math.max(cy.zoom(), 1) },
+    { duration: 250 }
+  );
+}
+
+function groupResolved(group: EntityGroup) {
+  return group.matches.length > 0 && group.matches.every((m) => m.resolved);
+}
+
+function groupResolution(group: EntityGroup) {
+  return group.matches[0]?.resolution ?? "";
+}
+
+async function resolveGroup(group: EntityGroup, resolution: string) {
+  actionError.value = "";
+  const resolved = resolution !== "";
+  try {
+    const updated = await Promise.all(
+      group.matches.map((m) => updateMatchResolution(m.id, resolved, resolution))
+    );
+    const byId = new Map<number, Match>(updated.map((m: Match) => [m.id, m]));
+    matches.value = matches.value.map((m) => byId.get(m.id) ?? m);
+  } catch (err) {
+    actionError.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+// Dim everything that fails the current filters instead of removing it, so
+// the analyst keeps the surrounding context — the same pattern link-analysis
+// tools (Linkurious, Maltego) use for linked list/graph views.
+function updateGraphVisibility() {
+  if (!cy) return;
+  const visibleIds = new Set(filteredMatches.value.map((m) => `entity-${m.entity_id}`));
+  const matchType = filters.value.matchType;
+
+  // An entity counts as reviewed only when every one of its matches is.
+  const matchesByEntity = new Map<number, Match[]>();
+  for (const m of matches.value) {
+    const list = matchesByEntity.get(m.entity_id) ?? [];
+    list.push(m);
+    matchesByEntity.set(m.entity_id, list);
+  }
+  const reviewByEntity = new Map<number, string>();
+  for (const [entityId, entityMatches] of matchesByEntity) {
+    if (entityMatches.every((m) => m.resolved)) {
+      reviewByEntity.set(entityId, entityMatches[0].resolution);
+    }
+  }
+
+  cy.batch(() => {
+    cy!.nodes().forEach((node) => {
+      const isAgent = node.data("type") === "agent";
+      const review = isAgent ? undefined : reviewByEntity.get(entityPk(node.id()));
+      node.toggleClass("dimmed", !isAgent && !visibleIds.has(node.id()));
+      node.toggleClass("dismissed", review === "false_positive");
+      node.toggleClass("confirmed", review === "confirmed");
+    });
+    cy!.edges().forEach((edge) => {
+      const touchesHidden =
+        edge.source().hasClass("dimmed") ||
+        edge.target().hasClass("dimmed") ||
+        edge.source().hasClass("dismissed") ||
+        edge.target().hasClass("dismissed");
+      const touchesAgent =
+        edge.source().data("type") === "agent" || edge.target().data("type") === "agent";
+      const wrongType = !!matchType && touchesAgent && edge.data("label") !== matchType;
+      edge.toggleClass("dimmed", touchesHidden || wrongType);
+    });
+  });
+}
+
+function entityPk(nodeId: string) {
+  return Number(nodeId.replace("entity-", ""));
+}
+
+watch(filteredMatches, updateGraphVisibility);
 
 function renderGraph(graph: NetworkGraph) {
   if (!graphEl.value) return;
@@ -144,6 +245,29 @@ function renderGraph(graph: NetworkGraph) {
             "border-opacity": 1,
           },
         },
+        {
+          selector: ".dimmed",
+          style: {
+            opacity: 0.12,
+            "text-opacity": 0.15,
+          },
+        },
+        {
+          selector: "node.dismissed",
+          style: {
+            "background-color": "#9e9e9e",
+            color: "#999",
+            "text-opacity": 0.55,
+          },
+        },
+        {
+          selector: "node.confirmed",
+          style: {
+            "border-width": 4,
+            "border-color": "#1b5e20",
+            "border-opacity": 1,
+          },
+        },
       ],
     });
 
@@ -160,10 +284,16 @@ function renderGraph(graph: NetworkGraph) {
     });
 
     cy.ready(fitGraph);
+    updateGraphVisibility();
+    // Dev-only hook so e2e tests can inspect graph state (canvas has no DOM).
+    if (import.meta.env.DEV) {
+      (window as unknown as { __cy?: Core }).__cy = cy;
+    }
   } catch (err) {
     // jsdom and other headless containers have no layout box for cytoscape to
-    // measure; the match list is still the useful half of the page.
-    error.value = err instanceof Error ? err.message : String(err);
+    // measure; the match list is still the useful half of the page, so keep
+    // this failure local to the graph area instead of failing the whole view.
+    graphError.value = err instanceof Error ? err.message : String(err);
   }
 }
 
@@ -174,6 +304,10 @@ onMounted(async () => {
     const [caseData, graph] = await Promise.all([getCase(caseId), getNetwork(caseId)]);
     detail.value = caseData;
     matches.value = caseData?.matches ?? [];
+    // The graph container only exists once loading is false (it's inside the
+    // v-else template), so flip the flag and wait a tick before rendering.
+    loading.value = false;
+    await nextTick();
     renderGraph(graph);
   } catch (err) {
     error.value = err instanceof Error ? err.message : String(err);
@@ -193,54 +327,177 @@ onBeforeUnmount(() => {
     <h1>Case {{ caseId }}</h1>
     <p v-if="loading" class="loading">Loading case...</p>
     <p v-else-if="error" class="error">{{ error }}</p>
-    <p v-else-if="detail" class="summary">
-      {{ detail.agent.name }} &middot; risk {{ detail.risk_score }} &middot;
-      {{ detail.status }} &middot; {{ uniqueEntityCount }} matched entity<span v-if="uniqueEntityCount !== 1">ies</span>
-    </p>
 
-    <div class="panels" :class="{ 'sidebar-open': sidebarOpen }">
-      <aside class="match-sidebar">
-        <button
-          type="button"
-          class="toggle"
-          @click="sidebarOpen = !sidebarOpen"
-          :aria-expanded="sidebarOpen"
-        >
-          {{ sidebarOpen ? "Hide matches" : `Show matches (${uniqueEntityCount})` }}
-        </button>
+    <template v-else>
+      <p class="summary" v-if="detail">
+        {{ detail.agent.name }} &middot; risk {{ detail.risk_score }} &middot;
+        {{ detail.status }} &middot; {{ summary.uniqueEntityCount.value }} matched
+        entit{{ summary.uniqueEntityCount.value === 1 ? "y" : "ies" }}
+      </p>
 
-        <div v-if="sidebarOpen" class="match-list-wrap">
-          <ul class="match-list">
-            <li v-for="group in groupedMatches" :key="group.entity_id" class="entity-card">
-              <div class="entity-header">
-                <span class="entity-name" :title="group.entity_name">{{ group.entity_name }}</span>
-                <span class="entity-meta">{{ group.entity_type }} &middot; {{ group.bestConfidence }}</span>
-              </div>
-              <div class="reasons">
-                <span v-for="match in group.matches" :key="match.id" class="reason">
-                  {{ match.match_type }} ({{ match.confidence }})
-                </span>
-              </div>
-              <p class="source-id">{{ group.source_id }}</p>
-            </li>
-            <li v-if="!groupedMatches.length" class="empty">No matches on this case.</li>
-          </ul>
+      <div class="summary-bar" v-if="detail">
+        <div class="summary-item">
+          <strong>Highest confidence</strong>
+          <span>{{ summary.highestConfidence.value }}</span>
         </div>
-      </aside>
-
-      <div class="graph-wrap">
-        <div class="graph-toolbar">
-          <button type="button" @click="fitGraph">Fit graph</button>
+        <div class="summary-item">
+          <strong>Strongest evidence</strong>
+          <span>{{ summary.strongestTier.value || "—" }}</span>
         </div>
-        <div class="graph-container" ref="graphEl"></div>
+        <div class="summary-item" v-for="(count, type) in summary.matchTypeCounts.value" :key="type">
+          <strong>{{ type }}</strong>
+          <span>{{ count }}</span>
+        </div>
       </div>
-    </div>
+
+      <div class="panels" :class="{ 'sidebar-open': sidebarOpen }">
+        <aside class="match-sidebar">
+          <button
+            type="button"
+            class="toggle"
+            @click="sidebarOpen = !sidebarOpen"
+            :aria-expanded="sidebarOpen"
+          >
+            {{ sidebarOpen ? "Hide matches" : `Show matches (${summary.uniqueEntityCount.value})` }}
+          </button>
+
+          <div v-if="sidebarOpen" class="match-list-wrap">
+            <div class="filters">
+              <label>
+                Match type
+                <select v-model="filters.matchType">
+                  <option value="">All</option>
+                  <option value="identifier_exact">Identifier exact</option>
+                  <option value="name_exact">Name exact</option>
+                  <option value="name_fuzzy">Name fuzzy</option>
+                  <option value="address_fuzzy">Address fuzzy</option>
+                  <option value="network_2nd_degree">2nd-degree network</option>
+                </select>
+              </label>
+              <label>
+                Entity type
+                <select v-model="filters.entityType">
+                  <option value="">All</option>
+                  <option value="person">Person</option>
+                  <option value="organization">Organization</option>
+                </select>
+              </label>
+              <label>
+                Min confidence: {{ filters.minConfidence }}
+                <input
+                  type="range"
+                  v-model.number="filters.minConfidence"
+                  min="0"
+                  max="100"
+                  step="5"
+                />
+              </label>
+              <button type="button" class="reset" @click="resetFilters">Reset filters</button>
+            </div>
+
+            <ul class="match-list">
+              <li
+                v-for="group in groupedMatches"
+                :key="group.entity_id"
+                class="entity-card"
+                :class="{
+                  selected: selectedEntityId === group.entity_id,
+                  resolved: groupResolved(group),
+                }"
+                role="button"
+                tabindex="0"
+                @click="focusEntity(group.entity_id)"
+                @keydown.enter="focusEntity(group.entity_id)"
+              >
+                <div class="entity-header">
+                  <span class="entity-name" :title="group.entity_name">{{ group.entity_name }}</span>
+                  <span class="entity-meta">{{ group.entity_type }} &middot; {{ group.bestConfidence }}</span>
+                </div>
+                <div class="reasons">
+                  <span v-for="match in group.matches" :key="match.id" class="reason">
+                    {{ match.match_type }} ({{ match.confidence }})
+                  </span>
+                </div>
+                <p class="source-id">{{ group.source_id }}</p>
+                <div class="card-actions" @click.stop @keydown.enter.stop>
+                  <template v-if="groupResolved(group)">
+                    <span class="resolution-badge" :class="groupResolution(group)">
+                      {{ groupResolution(group) === "confirmed" ? "Confirmed hit" : "False positive" }}
+                    </span>
+                    <button type="button" class="reopen" @click="resolveGroup(group, '')">
+                      Reopen
+                    </button>
+                  </template>
+                  <template v-else>
+                    <button type="button" class="confirm" @click="resolveGroup(group, 'confirmed')">
+                      Confirm hit
+                    </button>
+                    <button type="button" class="dismiss" @click="resolveGroup(group, 'false_positive')">
+                      False positive
+                    </button>
+                  </template>
+                </div>
+              </li>
+              <li v-if="!groupedMatches.length" class="empty">No matches match the current filters.</li>
+            </ul>
+            <p v-if="actionError" class="error action-error">{{ actionError }}</p>
+          </div>
+        </aside>
+
+        <div class="graph-wrap">
+          <div class="graph-toolbar">
+            <button type="button" @click="fitGraph">Fit graph</button>
+          </div>
+          <div class="graph-container" ref="graphEl">
+            <p v-if="graphError" class="error graph-error">
+              Graph could not be rendered: {{ graphError }}
+            </p>
+          </div>
+          <div class="graph-legend" aria-label="Graph legend">
+            <span class="legend-title">Nodes</span>
+            <span class="legend-item"><i class="dot dot-agent"></i>Your agent</span>
+            <span class="legend-item"><i class="dot dot-person"></i>Person</span>
+            <span class="legend-item"><i class="dot dot-org"></i>Organization</span>
+            <span class="legend-item"><i class="dot dot-confirmed"></i>Confirmed hit</span>
+            <span class="legend-item"><i class="dot dot-dismissed"></i>Dismissed</span>
+            <span class="legend-title">Edges</span>
+            <span class="legend-item"><i class="line line-direct"></i>Direct match</span>
+            <span class="legend-item"><i class="line line-name"></i>Name match</span>
+            <span class="legend-item"><i class="line line-shared"></i>Shared address / identifier</span>
+          </div>
+        </div>
+      </div>
+    </template>
   </section>
 </template>
 
 <style scoped>
 .case-detail {
   container-type: inline-size;
+}
+.summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+}
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 6rem;
+}
+.summary-item strong {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: #666;
+}
+.summary-item span {
+  font-size: 0.95rem;
+  font-weight: 600;
 }
 .panels {
   display: grid;
@@ -262,9 +519,32 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .match-list-wrap {
-  max-height: 36rem;
+  max-height: 44rem;
   overflow-y: auto;
   border: 1px solid #ddd;
+}
+.filters {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-bottom: 1px solid #eee;
+  background: #fafafa;
+}
+.filters label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: #444;
+}
+.filters select,
+.filters input[type="range"] {
+  width: 100%;
+}
+.reset {
+  justify-self: start;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
 }
 .match-list {
   list-style: none;
@@ -277,6 +557,58 @@ onBeforeUnmount(() => {
   padding: 0.6rem;
   margin-bottom: 0.5rem;
   background: #fafafa;
+  cursor: pointer;
+}
+.entity-card:hover {
+  border-color: #bbb;
+}
+.entity-card.selected {
+  border-color: #1976d2;
+  box-shadow: 0 0 0 1px #1976d2;
+}
+.entity-card.resolved {
+  opacity: 0.5;
+  background: #ececec;
+}
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+.card-actions button {
+  font-size: 0.72rem;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+}
+.card-actions .confirm:hover {
+  border-color: #1b5e20;
+  color: #1b5e20;
+}
+.card-actions .dismiss:hover {
+  border-color: #b71c1c;
+  color: #b71c1c;
+}
+.resolution-badge {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.resolution-badge.confirmed {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+.resolution-badge.false_positive {
+  background: #fbe9e7;
+  color: #b71c1c;
+}
+.action-error {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
 }
 .entity-header {
   display: flex;
@@ -327,6 +659,72 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 0.5rem;
   min-width: 0;
+  position: relative;
+}
+.graph-legend {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.5rem;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+  max-width: 70%;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  color: #444;
+}
+.legend-title {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.62rem;
+  color: #888;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
+}
+.dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-agent {
+  background: #1976d2;
+}
+.dot-person {
+  background: #d84315;
+}
+.dot-org {
+  background: #2e7d32;
+}
+.dot-confirmed {
+  background: #fff;
+  border: 2px solid #1b5e20;
+  box-sizing: border-box;
+}
+.dot-dismissed {
+  background: #9e9e9e;
+  opacity: 0.6;
+}
+.line {
+  width: 1.2rem;
+  height: 0;
+  border-top: 2px solid #bbb;
+  display: inline-block;
+}
+.line-name {
+  border-top-color: #1976d2;
+}
+.line-shared {
+  border-top-color: #f57c00;
 }
 .graph-toolbar {
   display: flex;
@@ -340,6 +738,9 @@ onBeforeUnmount(() => {
   height: 40rem;
   border: 1px solid #ddd;
   background: #fafafa;
+}
+.graph-error {
+  padding: 1rem;
 }
 .error {
   color: #b00020;

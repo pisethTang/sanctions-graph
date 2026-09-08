@@ -2,11 +2,11 @@
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404
-from rest_framework import status
+from rest_framework import mixins, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.viewsets import ReadOnlyModelViewSet, ModelViewSet
+from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet, ModelViewSet
 
 from screening.matcher import ScreenMatcher
 from screening.models import (
@@ -14,10 +14,13 @@ from screening.models import (
     EntityAddress,
     EntityIdentifier,
     Match,
+    SanctionedEntity,
     ScreeningCase,
 )
+from screening.risk_scoring import calculate_case_risk_score
 from screening.serializers import (
     AgentSerializer,
+    MatchResolutionSerializer,
     MatchSerializer,
     ScreeningCaseDetailSerializer,
     ScreeningCaseSerializer,
@@ -126,11 +129,22 @@ class ScreenView(APIView):
         agent = get_object_or_404(Agent, pk=data["agent_id"])
         results = ScreenMatcher().screen(agent, identifiers=data["identifiers"])
 
+        # Enrich each result with the matched entity's target flag so the risk
+        # scorer can distinguish direct targets from related parties.
+        entity_ids = [r["entity_id"] for r in results]
+        target_map = dict(
+            SanctionedEntity.objects.filter(id__in=entity_ids).values_list(
+                "id", "is_target"
+            )
+        )
+        for result in results:
+            result["entity"] = {"is_target": target_map.get(result["entity_id"], False)}
+
         with transaction.atomic():
             case = ScreeningCase.objects.create(
                 agent=agent,
-                # The strongest single hit stands in as the case risk score.
-                risk_score=max((r["confidence"] for r in results), default=0),
+                # Risk score combines evidence strength, diversity, and noise.
+                risk_score=calculate_case_risk_score(results),
             )
             matches = Match.objects.bulk_create(
                 [
@@ -157,6 +171,41 @@ class ScreenView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class MatchViewSet(mixins.RetrieveModelMixin, mixins.UpdateModelMixin, GenericViewSet):
+    """Review workflow for individual matches.
+
+    PATCH /api/matches/<id>/ with {resolved, resolution}. When every match on
+    a case is resolved, the case rolls up to "resolved"; reopening any match
+    reopens the case.
+    """
+
+    queryset = Match.objects.select_related("case", "entity")
+    authentication_classes = []
+    permission_classes = []
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_serializer_class(self):
+        if self.request.method == "PATCH":
+            return MatchResolutionSerializer
+        return MatchSerializer
+
+    def perform_update(self, serializer):
+        with transaction.atomic():
+            match = serializer.save()
+            case = match.case
+            has_unresolved = case.matches.filter(resolved=False).exists()
+            case.status = "open" if has_unresolved else "resolved"
+            case.save(update_fields=["status"])
+
+    def update(self, request, *args, **kwargs):
+        # Officers always send partial payloads (resolved + resolution).
+        kwargs["partial"] = True
+        response = super().update(request, *args, **kwargs)
+        # Answer with the full match representation the case page renders.
+        response.data = MatchSerializer(self.get_object()).data
+        return response
 
 
 class ScreeningCaseViewSet(ReadOnlyModelViewSet):

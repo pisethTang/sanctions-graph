@@ -7,5 +7,6 @@ export default defineConfig({
   test: {
     // Component tests mount into a DOM, so they need jsdom rather than node.
     environment: 'jsdom',
+    exclude: ['node_modules', 'e2e'],
   },
 })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { createAgent, screenAgent } from "../services/api";
+import { useAddressQuality } from "../composables/useAddressQuality";
 import type { Agent, IdentifierPair, ScreenResult } from "../types/api";
 
 const name = ref("");
@@ -29,6 +30,28 @@ function parseJsonArray(raw: string, field: string): unknown[] {
   if (!Array.isArray(parsed)) throw new Error(`${field} must be a JSON array.`);
   return parsed;
 }
+
+/** Extract full_text values from the address JSON array. */
+function parseAddressTexts(raw: string): string[] {
+  try {
+    const parsed = parseJsonArray(raw, "Addresses");
+    return parsed
+      .map((item) =>
+        typeof item === "string"
+          ? item
+          : (item as Record<string, string>)?.full_text || ""
+      )
+      .filter(Boolean) as string[];
+  } catch {
+    return [];
+  }
+}
+
+const addressWarnings = computed(() => {
+  return parseAddressTexts(addresses.value)
+    .map((text) => ({ text, ...useAddressQuality(text) }))
+    .filter((item) => item.isBroad.value);
+});
 
 async function onSubmit() {
   submitted.value = true;
@@ -88,6 +111,12 @@ async function onSubmit() {
         Addresses (JSON array)
         <textarea name="addresses" v-model="addresses" rows="3"></textarea>
       </label>
+      <ul v-if="addressWarnings.length" class="address-warnings">
+        <li v-for="(item, index) in addressWarnings" :key="index">
+          <strong>Warning:</strong> {{ item.warning.value }}
+          <span class="address-preview">("{{ item.text }}")</span>
+        </li>
+      </ul>
 
       <label>
         Identifiers (JSON array of [type, value])
@@ -154,5 +183,24 @@ button {
 }
 .error {
   color: #b00020;
+}
+.address-warnings {
+  list-style: none;
+  margin: -0.5rem 0 0.5rem;
+  padding: 0.5rem;
+  background: #fff3e0;
+  border: 1px solid #ffb74d;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: #e65100;
+}
+.address-warnings li {
+  margin-bottom: 0.25rem;
+}
+.address-warnings li:last-child {
+  margin-bottom: 0;
+}
+.address-preview {
+  color: #bf360c;
 }
 </style>
