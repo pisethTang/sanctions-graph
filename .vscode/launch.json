@@ -1,0 +1,35 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Django: runserver",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/manage.py",
+      "args": ["runserver"],
+      "cwd": "${workspaceFolder}/backend",
+      // Point straight at the uv-managed venv so the launch does not depend on
+      // whichever interpreter the Python extension happens to have selected.
+      "python": "${workspaceFolder}/backend/.venv/bin/python",
+      "django": true,
+      "justMyCode": true,
+      "autoStartBrowser": false,
+      "console": "integratedTerminal"
+    },
+    {
+      // Django's autoreloader forks a child process; breakpoints can be missed
+      // in the reloaded child. Use this one when a breakpoint refuses to bind.
+      "name": "Django: runserver (no reload)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/manage.py",
+      "args": ["runserver", "--noreload"],
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/bin/python",
+      "django": true,
+      "justMyCode": true,
+      "autoStartBrowser": false,
+      "console": "integratedTerminal"
+    }
+  ]
+}
