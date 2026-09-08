@@ -4,7 +4,12 @@ from django.contrib import admin
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from screening.views import AgentViewSet, MatchViewSet, ScreenView, ScreeningCaseViewSet
+from screening.views import (
+    AgentViewSet,
+    MatchViewSet,
+    ScreenView,
+    ScreeningCaseViewSet,
+)
 
 router = DefaultRouter()
 router.register(r"agents", AgentViewSet, basename="agent")

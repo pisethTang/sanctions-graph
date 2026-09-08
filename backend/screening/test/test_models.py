@@ -77,3 +77,19 @@ class TestAgentModel:
         )
         assert agent.name == "Test Agent"
         assert agent.aliases == ["TA", "Test"]
+
+
+class TestModelStr:
+    """Human-readable representations used in the admin and shell."""
+
+    def test_agent_str_is_the_name(self, db):
+        agent = Agent.objects.create(name="ABC Education Ltd", nationality="sg")
+        assert str(agent) == "ABC Education Ltd"
+
+    def test_sanctioned_entity_str_includes_entity_type(self, db):
+        entity = SanctionedEntity.objects.create(
+            name="Vladimir Putin",
+            entity_type="person",
+            source_id="NK-str-test",
+        )
+        assert str(entity) == "Vladimir Putin (person)"

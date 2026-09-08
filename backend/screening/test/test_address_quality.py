@@ -73,6 +73,14 @@ class TestAddressQualityScoring:
         assert result.is_broad is True
         assert result.score == 0.0
 
+    def test_short_numberless_address_not_on_denylist_is_broad(self, address_quality):
+        # One or two tokens with no digits is usually just a city or country,
+        # even when it is not one of the explicitly denylisted broad terms.
+        result = address_quality.assess_address_quality("Novosibirsk")
+        assert result.is_broad is True
+        assert result.score == pytest.approx(0.3, abs=0.01)
+        assert result.reason == "short and numberless"
+
 
 class TestConfidencePenalty:
     """Broad addresses reduce the confidence of address_fuzzy matches."""

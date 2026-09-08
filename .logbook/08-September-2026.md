@@ -376,7 +376,321 @@ The user dismissed NAYARA ENERGY as a false positive and noticed two things: the
 
 Every state change that exists in the list must be visible in the graph. Compliance officers think in terms of decisions, not UI panels — if a decision doesn't change the picture, it doesn't feel real.
 
+---
+
+## Implemented: on-demand neighbour expansion (TODO #1)
+
+Profiling first, before any code: on Case 6 the matcher already *computes* 172 entities at distance 3 and silently discards them (`cutoff=2` in `matcher.py`). Name-match seeding and shared-alias edges turned out to add **zero** links on real data — the hidden mass was the discarded third hop, not missing seeding rules.
+
+Chose **Option B (on-demand expansion)** over a 3rd-degree match tier: exploration without polluting the match list or the audit snapshot.
+
+### Backend (tests first — `screening/test/test_entity_neighbours.py`, 9 tests)
+
+1. **`GET /api/entities/<id>/neighbours/`** (`EntityViewSet.neighbours`): returns entities sharing an address or identifier with the given entity, in cytoscape shape. Edges carry a `detail` field with the actual shared evidence (the address string, or "shared identifier" since hashes are meaningless to analysts). Nothing is persisted.
+2. **Topology fix in `build_network`**: `network_2nd_degree` matches no longer get a fake direct agent→entity edge. The true path (agent → bridge → entity) is carried by the shared-attribute edges. Note: this only affects *new* screenings — existing snapshots are frozen by design, so re-screen Case 6 to see it.
+
+### Frontend
+
+- `getNeighbours()` in `services/api.ts`.
+- Tapping any entity node expands it: neighbours are fetched once per node and placed in a ring around it (no full re-layout, so the graph doesn't reshuffle). Expanded nodes get a dashed grey border and the `context` class, are exempt from filter dimming (they're analyst-invoked, not matches), and appear in the legend as "Expanded neighbour".
+- New e2e test: tap → neighbour node + edge appear with the `context` class → filter changes don't dim it.
+
+### Verification
+
+- Backend: `uv run pytest` → 73 passed (9 new)
+- Frontend: `npm test` → 39 passed, `npm run test:e2e` → 8 passed, `npm run build` → clean
+
+---
+
+## Implemented: 100% pytest coverage of screening logic (TODO #2, minus deployment)
+
+Added `pytest-cov` as a dev dependency and a `[tool.coverage.run]` config in `backend/pyproject.toml` that omits test files and migrations (scaffolding, not logic). Target command: `uv run pytest --cov=screening --cov-report=term-missing`.
+
+Starting point was 90% (the ingestion command was at 29%). +35 new tests (73 → 108) closed every gap:
+
+- **`test_ingest_opensanctions.py`** (new, 17 tests): `parse_country_code`, `CommandError` on a missing dump, full run creates entities/aliases/addresses/identifiers with parsed values, malformed lines, schema/no-name/no-id skips, `--limit`, `--batch-size 1`, intra-batch dedup, idempotent re-run, stdout reporting.
+- **`test_matcher.py`** (+6): blank-name guards, empty-address guard, empty-frontier early return, plain-string agent addresses, `_collect` tier-replacement branch.
+- **`test_serializers.py`** (new, 7): resolution validation, agent-id validation, dict-form and pair-form identifier normalisation, malformed/empty identifier rejection.
+- **`test_models.py`** (+2): both `__str__` methods.
+- **`test_match_resolution.py`** (+1): `GET /api/matches/<id>/`.
+- **`test_api.py`** (+1): live network rebuild when the snapshot is empty.
+- **`test_address_quality.py`** (+1): the short-numberless-address fallback ("Novosibirsk" → broad, 0.3).
+
+Two production-code warts surfaced (kept as defensive code, noted for later): `counts["entities"]` counts attempted rather than inserted rows if `bulk_create` silently drops one; and the empty-address guard in `_address_fuzzy_matches` is unreachable through `screen()` because `_agent_addresses` already strips empties.
+
+Final: **100% line coverage on every screening module, 108 tests passing.** Deployment half of TODO #2 remains open.
+
 #### Todo
 
-1. surface 100+ hidden 2nd-degree links via addresses and aliases 
-2. verify screening logic with 100% pytest coverage, deployed stack to Vercel and railway.
+1. ~~surface 100+ hidden 2nd-degree links via addresses and aliases~~ — done via on-demand expansion (the hidden links were the discarded 3rd hop, not aliases)
+2. ~~verify screening logic with 100% pytest coverage~~ — done; deploy stack to Vercel and Railway still open.
+
+
+
+To get to 100% coverge for the backend codebase, I added 17 more tests in `test_ingest_opensanctions.py` and 7 more in `test_serializers.py` and voilà:
+
+
+<details> 
+
+<summary>Running the coverage report</summary>
+
+
+```bash
+uv run pytest --cov=screening --cov-report=term-missing
+========================================== test session starts ==========================================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+django: version: 6.1.1, settings: sanctionsgraph.settings (from ini)
+rootdir: /home/sething2002/personal-projects/VueDjango/sanctions-graph/backend
+configfile: pytest.ini
+plugins: cov-7.1.0, django-4.14.0
+collected 108 items                                                                                     
+
+screening/test/test_address_quality.py ..                                                         [  1%]
+screening/test/test_api.py ......                                                                 [  7%]
+screening/test/test_entity_neighbours.py .........                                                [ 15%]
+screening/test/test_ingest_opensanctions.py ..............                                        [ 28%]
+screening/test/test_match_resolution.py ..........                                                [ 37%]
+screening/test/test_matcher.py .................                                                  [ 53%]
+screening/test/test_models.py .....                                                               [ 58%]
+screening/test/test_serializers.py ........                                                       [ 65%]
+screening/test/test_target_flag.py ...                                                            [ 68%]
+screening/test/test_address_quality.py ...........                                                [ 78%]
+screening/test/test_ingest_opensanctions.py ...                                                   [ 81%]
+screening/test/test_matcher.py .                                                                  [ 82%]
+screening/test/test_models.py ......                                                              [ 87%]
+screening/test/test_risk_scoring.py ..........                                                    [ 97%]
+screening/test/test_target_flag.py ...                                                            [100%]
+
+============================================ tests coverage =============================================
+___________________________ coverage: platform linux, python 3.12.13-final-0 ____________________________
+
+Name                                                    Stmts   Miss  Cover   Missing
+-------------------------------------------------------------------------------------
+screening/__init__.py                                       0      0   100%
+screening/address_quality.py                               25      0   100%
+screening/admin.py                                          6      0   100%
+screening/apps.py                                           3      0   100%
+screening/management/__init__.py                            0      0   100%
+screening/management/commands/__init__.py                   0      0   100%
+screening/management/commands/ingest_opensanctions.py     126      0   100%
+screening/matcher.py                                      136      0   100%
+screening/models.py                                        66      0   100%
+screening/risk_scoring.py                                  42      0   100%
+screening/serializers.py                                   65      0   100%
+screening/views.py                                        118      0   100%
+-------------------------------------------------------------------------------------
+TOTAL                                                     587      0   100%
+========================================== 108 passed in 3.98s ==========================================
+```                                                                                      
+</details>
+
+
+
+I took a stab at playing around some more with this new beahvior. I found that moving the confidence bar over 50 removed a lot of entities, which could help users make out the figure more clearly.
+
+<img src="../assets/2nd_degree_case7.png"></img>
+
+
+
+
+
+---
+
+## Fix: removed cytoscape `degree` data warning + what node taps do
+
+The user hit a console warning: `Do not assign mappings to elements without corresponding data (i.e. ele 'entity-...' has no mapping for property 'width' with data field 'degree')`. It came from using `width: "mapData(degree, ..."` and a `[degree < 2]` selector in the stylesheet — both read `degree` from node data, but `degree` is a cytoscape-computed property, not a data field.
+
+### Fix (`frontend/src/views/CaseDetail.vue`)
+
+- Replaced `mapData(degree, ...)` node width/height with function-based styles that call `ele.degree()` live.
+- Replaced the `[degree < 2]` label-hiding selector with a function-based `label` style that returns `""` for low-degree nodes.
+- Updated `mouseout` to clear the hover label bypass via `removeStyle("label")`, restoring the function-based rule.
+- Removed the data-stamping workaround that was added for the old mapData approach.
+
+This means node size and label visibility are computed from the live topology, so newly expanded neighbours get correct sizes/labels automatically without any data patching.
+
+### Behaviour when you tap/click each node type
+
+- **Your agent (blue node)**: nothing happens. It is the fixed center of the graph.
+- **Any matched entity (red/green node, solid border)**: the first tap selects it (yellow ring), centers the view on it, and fetches its neighbours from `/api/entities/<id>/neighbours/`. New nodes appear in a ring around it with **dashed grey borders** — those are the expanded context layer. A second tap on the same node does nothing (you already expanded it).
+- **An expanded neighbour (dashed border)**: same as above — you can keep walking the network one hop at a time.
+- **A dismissed node (grey)**: still tappable — being dismissed only changes its color/opacity, not its expansion behaviour.
+- **A confirmed node (green ring)**: still tappable.
+
+### Tests
+
+- Added a console-warning regression to the e2e graph-render test: asserts no `no mapping for property` warnings are emitted.
+- `npm test` → 39 passed
+- `npm run test:e2e` → 8 passed
+- `npm run build` → clean
+
+---
+
+## Fix: double-tapping a node no longer expands it twice
+
+The user reported that tapping a node twice caused it to expand again, blowing up the graph. The original guard used a component-local `Set` (`expandedEntityIds`), which is fragile in dev/HMR and doesn't survive a re-mount.
+
+### Fix (`frontend/src/views/CaseDetail.vue`)
+
+- Removed `expandedEntityIds`.
+- The expanded state is now stored on the node itself via an `expanded` class.
+- `expandEntity()` guards with `if (node.hasClass("expanded")) return;`, adds the class immediately, and removes it only if the fetch fails.
+- E2E expansion test now asserts a second tap on the same node leaves node and edge counts unchanged.
+
+### Verification
+
+- `npm test` → 39 passed
+- `npm run test:e2e` → 8 passed
+- `npm run build` → clean
+
+Alright, time to deploy ...
+
+---
+
+## Removal: tap-to-expand neighbour feature
+
+The user decided the tap-to-expand behaviour was confusing and asked for it to be removed entirely.
+
+### Backend changes
+
+- Restored `backend/screening/views.py` to a clean state after an accidental corruption left a duplicated `build_network` body and a stray `AgentViewSet`.
+- Removed `EntityViewSet` and its `neighbours` action.
+- Removed the `entities` router registration from `backend/sanctionsgraph/urls.py`.
+- Deleted `backend/screening/test/test_entity_neighbours.py`.
+- Added `test_network_links_entities_with_shared_address_or_identifier` to `backend/screening/test/test_api.py` to keep `build_network`'s shared-edge path at 100% coverage.
+
+### Frontend changes
+
+- Removed `getNeighbours` from `frontend/src/services/api.ts`.
+- Removed `expandEntity`, the `cy.on("tap", "node", ...)` handler, the `node.context` style, and the "Expanded neighbour" legend item/CSS from `frontend/src/views/CaseDetail.vue`.
+- Removed the tap-to-expand e2e test from `frontend/e2e/case-detail.spec.ts`.
+- Removed the "Expanded neighbour" legend assertion from `frontend/src/views/CaseDetail.test.ts`.
+
+### Verification
+
+- `uv run pytest --cov=screening --cov-report=term-missing -q` → 100 passed, 100% coverage
+- `npm test` → 39 passed
+- `npm run test:e2e` → 7 passed
+- `npm run build` → clean
+
+Tapping a node now does nothing; only sidebar card clicks focus/select a node.
+
+
+---
+
+## Fix: cap node sizes to stop hubs from becoming giant balls
+
+Dense cases (e.g., Case 7) rendered a few highly-connected organizations as enormous green circles that swallowed their neighbours. The old size formula grew linearly with degree:
+
+```javascript
+16 + Math.max(0, degree - 1) * (32 / 19)
+```
+
+A node with 50+ shared-address links could end up ~100 px wide.
+
+### Changes (`frontend/src/views/CaseDetail.vue`)
+
+- Added `nodeSize(degree)` using a capped log curve:
+  - base 22 px,
+  - + `log2(degree) * 8`,
+  - capped at 44 px.
+- Replaced the linear `width`/`height` style functions with `nodeSize(ele.degree())`.
+- Tuned the `cose` layout to reduce overlap:
+  - `componentSpacing` 80 → 120,
+  - `idealEdgeLength` 60 → 100,
+  - `nodeRepulsion` 800000 → 1200000.
+
+### Reasoning
+
+Log scaling means hubs are still slightly larger than leaf nodes, but the size difference is bounded, so clusters remain readable. The layout tuning pushes overlapping components apart without changing the overall force-directed feel.
+
+### Verification
+
+- `npm test` → 39 passed
+- `npm run test:e2e` → 7 passed
+- `npm run build` → clean
+
+
+---
+
+## Fix: clarify the graph legend
+
+The old legend called grey agent→entity edges "Direct match" while blue agent→entity edges were "Name match" — both are direct matches, so the label was misleading. The user found it confusing.
+
+### Changes
+
+- Added an explicit `category` field to every edge in `backend/screening/views.py`:
+  - `name` for `name_exact` / `name_fuzzy`
+  - `identifier_address` for `identifier_exact` / `address_fuzzy`
+  - `shared` for `shared_address` / `shared_identifier`
+- Updated frontend edge styles in `frontend/src/views/CaseDetail.vue` to select by `category` instead of fragile label substrings.
+- Rewrote the legend into two clear groups:
+  - **Agent matches**: Name match (blue), Identifier / address match (grey)
+  - **Entity links**: Shared address / identifier (orange)
+- Updated `frontend/src/views/CaseDetail.test.ts` and `backend/screening/test/test_api.py` to assert the new categories and legend text.
+
+### Verification
+
+- `uv run pytest --cov=screening --cov-report=term-missing -q` → 101 passed, 100% coverage
+- `npm test` → 39 passed
+- `npm run test:e2e` → 7 passed
+- `npm run build` → clean
+
+
+---
+
+## Fix: restore orange shared edges on older snapshots
+
+After deploying the category-based edge styles, existing cases (screened before the `category` field existed) lost their orange shared edges because their frozen `network_snapshot` did not include `category`. The new selectors required `category = 'shared'`, so old edges defaulted to grey.
+
+### Change (`frontend/src/views/CaseDetail.vue`)
+
+Added a label-based fallback to the edge style selectors:
+
+```javascript
+selector: "edge[category = 'shared'], edge[label *= 'shared']",
+selector: "edge[category = 'name'], edge[label *= 'name']",
+```
+
+This keeps new snapshots using the explicit category while older snapshots still color correctly by their label. The snapshot itself stays frozen; only the renderer becomes backward-compatible.
+
+### Verification
+
+- `npm test` → 39 passed
+- `npm run test:e2e` → 7 passed
+- `npm run build` → clean
+
+
+---
+
+## Feature: click a graph node to focus its neighbourhood
+
+Added a "focus mode" so officers can isolate a suspicious entity and see only its direct connections.
+
+### Behaviour
+
+- Click any entity node → it is selected and every node/edge outside its immediate neighbourhood is dimmed.
+- Ctrl/Cmd + click another node → add or remove it from the focus set, so combined neighbourhoods are visible.
+- Click the canvas background → clear focus.
+- A "Clear focus" button appears in the graph toolbar while focus mode is active.
+- Clicking a sidebar card also focuses that entity in the graph.
+
+### Implementation (`frontend/src/views/CaseDetail.vue`)
+
+- Added `focusedNodeIds` ref and `focusNode` / `clearFocus` helpers.
+- Extended `updateGraphVisibility()` to compute `closedNeighborhood()` of focused nodes and dim anything outside it.
+- Added `tap` handlers on nodes and the canvas background.
+- Added a conditional "Clear focus" button next to "Fit graph".
+
+### Tests
+
+- Updated `frontend/e2e/case-detail.spec.ts` mock data to include three matched entities and a shared edge between two of them.
+- Added e2e test asserting focus on one entity dims an unconnected entity and keeps the agent + connected entity visible.
+- Updated card-related locators to use `.first()` now that multiple cards exist.
+
+### Verification
+
+- `uv run pytest --cov=screening --cov-report=term-missing -q` → 101 passed, 100% coverage
+- `npm test` → 39 passed
+- `npm run test:e2e` → 8 passed
+- `npm run build` → clean

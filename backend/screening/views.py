@@ -6,7 +6,7 @@ from rest_framework import mixins, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.viewsets import GenericViewSet, ReadOnlyModelViewSet, ModelViewSet
+from rest_framework.viewsets import GenericViewSet, ModelViewSet, ReadOnlyModelViewSet
 
 from screening.matcher import ScreenMatcher
 from screening.models import (
@@ -65,15 +65,20 @@ def build_network(case):
                 }
             }
         )
-        edges.append(
-            {
-                "data": {
-                    "source": agent_node,
-                    "target": node_id,
-                    "label": match.match_type,
+        # A 2nd-degree match is reached through a bridge entity; the shared
+        # edges below carry that path, so a direct agent edge would be a lie.
+        if match.match_type != "network_2nd_degree":
+            category = "name" if match.match_type.startswith("name") else "identifier_address"
+            edges.append(
+                {
+                    "data": {
+                        "source": agent_node,
+                        "target": node_id,
+                        "label": match.match_type,
+                        "category": category,
+                    }
                 }
-            }
-        )
+            )
 
     # Entity-to-entity links: the shared attributes that explain a hit.
     for model, field, label in (
@@ -92,13 +97,14 @@ def build_network(case):
         for members in groups.values():
             members = sorted(members)
             for i, left in enumerate(members):
-                for right in members[i + 1:]:
+                for right in members[i + 1 :]:
                     edges.append(
                         {
                             "data": {
                                 "source": f"entity-{left}",
                                 "target": f"entity-{right}",
                                 "label": label,
+                                "category": "shared",
                             }
                         }
                     )

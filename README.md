@@ -15,28 +15,32 @@ Project goals:
 2. have fun -- simplicity 
 3. quench my curiosity ... 
 
-
+<!-- 
 ```
 - "Flywire's own 10-K admits they are under active OFAC investigation for sanctions violations." (Page 28, Item 1A)
 - "A Florida school was fined $1.72 million by OFAC for failing to screen tuition payors."
 - "The industry false-positive rate is 90–95%, meaning compliance teams drown in noise — my graph approach makes the 'why' visible and auditable."
-```
+``` -->
 
 
-## Key terminologies
+## Key terminologies (WIP)
 1. PEP: 
 2. OpenSanctions Data
 
+
+<!-- 
 ## Work in progress, TODO: 
-- 
+-  -->
 
 ## Core engineering concepts
 - Preserving traceability from the original record once an association is detected between an education agent and an entity from the sanction list.
 - 
 
 
-## Try it
-[Live](https://google.com) app.
+## Try it [WIP]
+I deployed the backend on Railway and frontend on Vercel, however I am migrating the backend from railway to AWS Lambda to maintain 100% uptime.
+
+[Live](https://google.com) app coming soon.
 
 
 
@@ -56,9 +60,8 @@ Both ci and cd workflows were created for both frontend and backend using GitHub
 
 ## Support
 
-
 Let us know if you have issues.
-See our mailing list at: project@google-groups.com
+See our mailing list at: tangpiseth43@gmail.com
 
 License
 -------
@@ -67,7 +70,7 @@ The project is licensed under the BSD license.
 
 
 
-# References
+# References (WIP)
 1. [GitHub CLI](https://github.com/cli/cli?ref_product=cli&ref_type=engagement&ref_style=text#installation)
 2. [OFAC Official Website](https://ofac.treasury.gov/)
 3. [OFAC Video Series](https://ofac.treasury.gov/ofac-video-series)
