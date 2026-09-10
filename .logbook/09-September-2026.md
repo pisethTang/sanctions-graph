@@ -22,7 +22,7 @@ Two things.
 
 First, Vercel now has proper Django support. It finds `manage.py`, reads `WSGI_APPLICATION` out of my settings (which I already have), and runs it as a serverless function. It is not a hack.
 
-Second, Neon. Their free Postgres plan is 0.5 GB and 100 compute hours a month, and it is permanent rather than a trial. My database is only 72 MB, so it fits with plenty of room. That kills the 30 day database clock which was the main thing making Render mediocre.
+Second, [Neon](https://console.neon.tech/app/projects/billowing-lake-50713788?database=neondb). Their free Postgres plan is 0.5 GB and 100 compute hours a month, and it is permanent rather than a trial. My database is only 72 MB, so it fits with plenty of room. That kills the 30 day database clock which was the main thing making Render mediocre.
 
 The cold start also matters. Render sleeps after 15 minutes and takes about a minute to wake. Vercel takes 300 to 800 ms. That is the difference between a link that looks broken and one that just feels slightly slow.
 
@@ -242,3 +242,6 @@ Neon Postgres, Sydney           208,930 rows, 72 MB of 0.5 GB, pg_trgm on
 ```
 
 Still to watch: the matcher inside a function with a hard time limit. Case 6 with its 128 Hong Kong matches is the one that will find that limit first.
+
+
+
