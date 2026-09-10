@@ -2,6 +2,12 @@
 
 <img src="./assets/logo.svg" alt="SanctionsGraph logo" width="120" />
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+![Django](https://img.shields.io/badge/Django-6.1-092E20?logo=django)
+![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vue.js)
+![Postgres](https://img.shields.io/badge/PostgreSQL-pg__trgm-4169E1?logo=postgresql)
+
+
 SanctionsGraph is a FinTech compliance intelligence tool that combats against sanctions violations. 
 
 
