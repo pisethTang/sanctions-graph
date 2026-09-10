@@ -36,7 +36,12 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 
 
-ALLOWED_HOSTS = []
+# Hosts are supplied by the platform at deploy time; the defaults keep local
+# development working unchanged.
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
+
+# Django requires the scheme here (https://...), unlike ALLOWED_HOSTS.
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
 
 
 
@@ -62,6 +67,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -72,8 +78,12 @@ MIDDLEWARE = [
 
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    o.strip()
+    for o in os.environ.get(
+        'CORS_ALLOWED_ORIGINS',
+        'http://localhost:5173,http://127.0.0.1:5173',
+    ).split(',')
+    if o.strip()
 ]
 
 ROOT_URLCONF = 'sanctionsgraph.urls'
@@ -99,26 +109,26 @@ WSGI_APPLICATION = 'sanctionsgraph.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
+import dj_database_url
+
+# Railway (and most PaaS) supply a single DATABASE_URL. The default keeps the
+# local docker container working with no env file present.
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        # 'NAME': 'sanctionsgraph',
-        # 'USER': 'sguser',
-        # 'PASSWORD': 'sgpass',
-        # 'HOST': 'localhost',
-        # 'PORT': '5432',
-        'NAME': os.environ.get('DB_NAME', 'sanctionsgraph'),
-        'USER': os.environ.get('DB_USER', 'sguser'),
-        'PASSWORD': os.environ.get('DB_PASSWORD', 'sgpass'),
-        'HOST': os.environ.get('DB_HOST', 'localhost'),
-        'PORT': os.environ.get('DB_PORT', '5432'),
-    }
+    'default': dj_database_url.config(
+        default=os.environ.get(
+            'DATABASE_URL',
+            'postgres://sguser:sgpass@localhost:5432/sanctionsgraph',
+        ),
+        # Serverless: every request may run in a fresh process, so a persistent
+        # connection is one Postgres slot held hostage per idle instance. Close
+        # it immediately in production and let Neon's pooler do the reuse.
+        # Locally there is one long-lived process, so keeping it open is a win.
+        conn_max_age=0 if not DEBUG else 600,
+        # Neon's pooled connection string runs pgbouncer in transaction mode,
+        # which cannot hold a server-side cursor open across statements.
+        disable_server_side_cursors=not DEBUG,
+        ssl_require=not DEBUG,
+    )
 }
 
 # Password validation
@@ -156,6 +166,14 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# WhiteNoise serves the admin's CSS/JS in production; without it /admin/ renders
+# unstyled once DEBUG is False.
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage'},
+}
 
 
 # Email
@@ -163,6 +181,31 @@ STATIC_URL = 'static/'
 
 MAILERS = {
     'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
+        'BACKEND': os.environ.get(
+            'EMAIL_BACKEND',
+            'django.core.mail.backends.console.EmailBackend'
+            if DEBUG
+            else 'django.core.mail.backends.dummy.EmailBackend',
+        ),
     },
 }
+
+
+# Production hardening. Railway terminates TLS at its proxy and forwards the
+# original scheme in X-Forwarded-Proto, so Django needs to be told to trust it
+# or SECURE_SSL_REDIRECT loops forever.
+if not DEBUG:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    # Deliberately short. Raise it once the domain is settled; a long max-age is
+    # hard to walk back because browsers cache it.
+    SECURE_HSTS_SECONDS = 3600
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+
+# This project sends no email, so Django's insistence on an SMTP backend does
+# not apply. HSTS preload is left off on purpose: submitting to the browser
+# preload list is effectively irreversible.
+SILENCED_SYSTEM_CHECKS = ['mail.E001', 'security.W021']
