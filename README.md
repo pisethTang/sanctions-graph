@@ -38,9 +38,9 @@ Project goals:
 
 
 ## Try it [WIP]
-I deployed the backend on Railway and frontend on Vercel, however I am migrating the backend from railway to AWS Lambda to maintain 100% uptime.
+I deployed the backend on Railway and frontend on Vercel, however I am migrating the backend from railway to Vercel as well to maintain 100% uptime.
 
-[Live](https://google.com) app coming soon.
+[Live](https://sanctions.seth-tang.me/) app.
 
 
 
@@ -60,8 +60,7 @@ Both ci and cd workflows were created for both frontend and backend using GitHub
 
 ## Support
 
-Let us know if you have issues.
-See our mailing list at: tangpiseth43@gmail.com
+Let me know if you have issues tangpiseth43@gmail.com
 
 License
 -------

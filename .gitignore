@@ -13,3 +13,4 @@ data
 context.txt
 staticfiles/
 .coverage
+assets/context.txt
