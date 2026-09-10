@@ -1,6 +1,6 @@
 <!-- # SanctionsGraph -->
 
-<img src="logo.svg" alt="SanctionsGraph logo" width="120" />
+<img src="./assets/logo.svg" alt="SanctionsGraph logo" width="120" />
 
 SanctionsGraph is a FinTech compliance intelligence tool that combats against sanctions violations. 
 
