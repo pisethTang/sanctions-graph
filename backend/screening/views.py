@@ -131,6 +131,8 @@ class ScreenView(APIView):
         request_serializer = ScreenRequestSerializer(data=request.data)
         request_serializer.is_valid(raise_exception=True)
         data = request_serializer.validated_data
+        if data is None:
+            return 
 
         agent = get_object_or_404(Agent, pk=data["agent_id"])
         results = ScreenMatcher().screen(agent, identifiers=data["identifiers"])
